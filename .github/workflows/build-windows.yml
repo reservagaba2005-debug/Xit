@@ -1,0 +1,59 @@
+
+name: Build AimTrainer Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem . -Filter "AimTrainer-CS2-Style-Windows.zip" -Recurse | Select-Object -First 1
+
+          if (-not $zip) {
+            throw "Arquivo ZIP não encontrado"
+          }
+
+          Expand-Archive $zip.FullName "$env:RUNNER_TEMP\source" -Force
+
+          $cmake = Get-ChildItem "$env:RUNNER_TEMP\source" -Filter CMakeLists.txt -Recurse | Select-Object -First 1
+
+          if (-not $cmake) {
+            throw "CMakeLists.txt não encontrado"
+          }
+
+          "SOURCE_DIR=$($cmake.DirectoryName)" >> $env:GITHUB_ENV
+
+      - name: Configure
+        run: cmake -S "$env:SOURCE_DIR" -B build -A x64
+
+      - name: Compile
+        run: cmake --build build --config Release
+
+      - name: Verify EXE
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem build -Filter AimTrainer.exe -Recurse | Select-Object -First 1
+
+          if (-not $exe) {
+            throw "EXE não foi gerado"
+          }
+
+          New-Item -ItemType Directory artifact -Force | Out-Null
+          Copy-Item $exe.FullName artifact/AimTrainer.exe
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: AimTrainer-Windows-x64
+          path: artifact/AimTrainer.exe
+          if-no-files-found: error
